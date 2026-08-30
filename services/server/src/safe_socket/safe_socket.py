@@ -5,11 +5,11 @@ def recv_all(socket: socket.socket, size):
     bytesAmount = 0
     readBytes = []
     while bytesAmount < size:
-        read = socket.recv(size - bytesAmount)
-        if not read:
+        bytes = socket.recv(size - bytesAmount)
+        if not bytes:
             return b""
-        readBytes.append(read)
-        bytesAmount += len(read)
+        readBytes.append(bytes)
+        bytesAmount += len(bytes)
     return b"".join(readBytes)
 
 

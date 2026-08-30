@@ -1,37 +1,54 @@
 import socket
 import logger
 import safe_socket
+from communication.messages import recv_bet_message, bet_from_response
+from src_frozen.lottery import Lottery, Bet
+import lottery_bet
 
-_ECHO_SERVER_MESSAGE_SIZE = 1024
-
+END_MESSAGE = "END"
 
 class Server:
-    def __init__(self, server_host: str, server_port: int) -> None:
+    def __init__(self, server_host: str, server_port: int, server_lottery: Lottery) -> None:
         self.server_host = server_host
         self.server_port = server_port
+        self.server_lottery = server_lottery
 
     def _handle_client(self, client_socket):
         action = "handle-client"
-        message_amount = 0
+        bets = []
         try:
             logger.info(action, logger.LogResult.in_progress)
             while True:
-                client_message = safe_socket.recv_all(
-                    client_socket, _ECHO_SERVER_MESSAGE_SIZE
+                bet_response = recv_bet_message(
+                    client_socket,
                 )
-                if not client_message:
+
+                if bet_response == END_MESSAGE:
                     logger.info(
                         action,
                         logger.LogResult.success,
-                        "messages-amount",
-                        message_amount,
+                        "bets-finished"
+                    )
+                    break
+
+                bet = bet_from_response(bet_response)
+                if not bet:
+                    logger.error(
+                        action,
+                        logger.LogResult.fail,
+                        "bet-not-received",
                     )
                     return
-                message_amount += 1
-                safe_socket.send_all(client_socket, client_message)
+                bets.append(bet)
+
+            self.server_lottery.store_bets(bets)
+
+            winners = lottery_bet.get_winner(self.server_lottery)
+
+            lottery_bet.send_winners(client_socket, winners)
         except Exception as e:
             logger.error(
-                action, logger.LogResult.fail, "messages-amount", message_amount
+                action, logger.LogResult.fail,
             )
             raise e
 
@@ -49,4 +66,5 @@ class Server:
                     raise e
                 logger.info(action, logger.LogResult.success)
 
-                self._handle_client(client_socket)
+                with client_socket:
+                    self._handle_client(client_socket)
