@@ -1,11 +1,8 @@
 import socket
 import logger
-import safe_socket
-from communication.messages import recv_bet_message, bet_from_response
-from src_frozen.lottery import Lottery, Bet
-import lottery_bet
-
-END_MESSAGE = "END"
+from communication.messages import recv_batch_bet_message, send_messages, send_batch_failed, send_batch_succeeded
+from .utils import get_winner
+from lottery import Lottery
 
 class Server:
     def __init__(self, server_host: str, server_port: int, server_lottery: Lottery) -> None:
@@ -15,37 +12,36 @@ class Server:
 
     def _handle_client(self, client_socket):
         action = "handle-client"
-        bets = []
         try:
             logger.info(action, logger.LogResult.in_progress)
             while True:
-                bet_response = recv_bet_message(
-                    client_socket,
-                )
-
-                if bet_response == END_MESSAGE:
+                try:
+                    bets = recv_batch_bet_message(client_socket, self.server_lottery)
+                except ConnectionError as error:
+                    logger.error(
+                        action,
+                        logger.LogResult.fail,
+                        "connection-error",
+                        "err",
+                        error,
+                    )
+                    return
+                except:
+                    send_batch_failed(client_socket)
+                    continue
+                if not bets:
                     logger.info(
                         action,
                         logger.LogResult.success,
                         "bets-finished"
                     )
                     break
+                self.server_lottery.store_bets(bets)
+                send_batch_succeeded(client_socket)
+                
 
-                bet = bet_from_response(bet_response)
-                if not bet:
-                    logger.error(
-                        action,
-                        logger.LogResult.fail,
-                        "bet-not-received",
-                    )
-                    return
-                bets.append(bet)
-
-            self.server_lottery.store_bets(bets)
-
-            winners = lottery_bet.get_winner(self.server_lottery)
-
-            lottery_bet.send_winners(client_socket, winners)
+            winners = get_winner(self.server_lottery)
+            send_messages(client_socket, winners)
         except Exception as e:
             logger.error(
                 action, logger.LogResult.fail,

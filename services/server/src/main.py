@@ -3,7 +3,7 @@ import sys
 
 import logger
 import server
-from src_frozen.lottery import Lottery
+from lottery import Lottery
 
 SERVER_HOST = os.environ["SERVER_HOST"]
 SERVER_PORT = int(os.environ["SERVER_PORT"])
