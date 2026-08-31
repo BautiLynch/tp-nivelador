@@ -16,7 +16,7 @@ class Server:
             logger.info(action, logger.LogResult.in_progress)
             while True:
                 try:
-                    bets = recv_batch_bet_message(client_socket, self.server_lottery)
+                    bets = recv_batch_bet_message(client_socket)
                 except ConnectionError as error:
                     logger.error(
                         action,

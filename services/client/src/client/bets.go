@@ -3,6 +3,7 @@ package client
 import (
 	"bufio"
 	"os"
+	"strings"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/communication"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
@@ -22,7 +23,7 @@ func SendBets(client *Client) error {
 	batchNumber := 1
 	for scanner.Scan() {
 		line := scanner.Text()
-		bet := communication.CreateBetMessage(line, client.config.AgencyId)
+		bet := CreateBetMessage(line, client.config.AgencyId)
 		bets = append(bets, bet)
 
 		if len(bets) < client.config.BatchSize {
@@ -105,4 +106,9 @@ func GetWinners(client *Client) error {
 	}
 
 	return nil
+}
+
+func CreateBetMessage(line string, agencyId string) string {
+	bet := []string{agencyId, line}
+	return strings.Join(bet, ",")
 }

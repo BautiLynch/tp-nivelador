@@ -18,49 +18,30 @@ const NACK_MESSAGE = "NACK"
 const END_MESSAGE = "END"
 
 func SendMessage(socket io.Writer, payload string) error {
-
-	payloadBytes := []byte(payload)
-
-	header := CreateHeader(payloadBytes)
-
-	if err := safe_socket.SendAll(socket, header); err != nil {
+	message := SerializeMessage(payload)
+	if err := safe_socket.SendAll(socket, message); err != nil {
 		return err
 	}
-
-	if err := safe_socket.SendAll(socket, payloadBytes); err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func RecvMessage(socket io.Reader) (string, bool, error) {
 	header, err := safe_socket.RecvAll(socket, HEADER_SIZE)
-
 	if err != nil {
 		return "", true, err
 	}
 
 	size := int(binary.BigEndian.Uint32(header))
-
 	winnerMessage, err := safe_socket.RecvAll(socket, size)
-
 	if err != nil {
 		return "", true, err
 	}
 
 	winner := string(winnerMessage)
-
 	if winner == END_MESSAGE {
 		return "", true, nil
 	}
-
 	return string(winner), false, nil
-}
-
-func CreateBetMessage(line string, agencyId string) string {
-	bet := []string{agencyId, line}
-	return strings.Join(bet, ",")
 }
 
 func CreateHeader(payloadBytes []byte) []byte {
@@ -69,17 +50,18 @@ func CreateHeader(payloadBytes []byte) []byte {
 	return header
 }
 
-func SendBatchBetMessage(socket net.Conn, batch []string) (bool, error) {
-	payload := strings.Join(batch, BATCH_SEPARATOR)
+func SerializeMessage(payload string) []byte {
 	payloadBytes := []byte(payload)
-
 	header := CreateHeader(payloadBytes)
 
-	if err := safe_socket.SendAll(socket, header); err != nil {
-		return false, err
-	}
+	return append(header, payloadBytes...)
+}
 
-	if err := safe_socket.SendAll(socket, payloadBytes); err != nil {
+func SendBatchBetMessage(socket net.Conn, batch []string) (bool, error) {
+	payload := strings.Join(batch, BATCH_SEPARATOR)
+	message := SerializeMessage(payload)
+
+	if err := safe_socket.SendAll(socket, message); err != nil {
 		return false, err
 	}
 
