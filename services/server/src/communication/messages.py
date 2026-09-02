@@ -24,7 +24,7 @@ def recv_batch_bet_message(socket: socket.socket):
     if not header:
         raise ConnectionError("Connection error caused header to not be received")
 
-    size = int.from_bytes(header)
+    size = int.from_bytes(header, byteorder="big", signed=False)
     response = recv_all(socket, size)
 
     if not response:
@@ -46,7 +46,7 @@ def send_batch_failed(socket: socket.socket):
 def serialize_message(payload: str):
     bytes_payload = payload.encode()
     size = len(bytes_payload)
-    header_bytes = size.to_bytes(HEADER_SIZE)
+    header_bytes = size.to_bytes(HEADER_SIZE, byteorder="big", signed=False)
     return header_bytes + bytes_payload
 
 def bet_from_response(bet_response: str):

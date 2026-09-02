@@ -1,17 +1,24 @@
 import socket
 import logger
+import threading
 from communication.messages import recv_batch_bet_message, send_messages, send_batch_failed, send_batch_succeeded
 from .utils import get_winner
 from lottery import Lottery
 
 class Server:
-    def __init__(self, server_host: str, server_port: int, server_lottery: Lottery) -> None:
+    def __init__(self, server_host: str, server_port: int, server_lottery: Lottery, agency_quorum_min: int) -> None:
         self.server_host = server_host
         self.server_port = server_port
         self.server_lottery = server_lottery
+        self.agency_quorum_min = agency_quorum_min
+        self.agencies_finished = 0
+        self.lock = threading.Lock()
+        self.cond_var = threading.Condition()
+        self.threads = []
 
     def _handle_client(self, client_socket):
         action = "handle-client"
+        agency_id = None
         try:
             logger.info(action, logger.LogResult.in_progress)
             while True:
@@ -36,17 +43,27 @@ class Server:
                         "bets-finished"
                     )
                     break
-                self.server_lottery.store_bets(bets)
+                if agency_id == None:
+                    agency_id = bets[0].agency_id
+                with self.lock:
+                    self.server_lottery.store_bets(bets)
                 send_batch_succeeded(client_socket)
-                
 
-            winners = get_winner(self.server_lottery)
+            with self.cond_var:
+                self.agencies_finished += 1
+                if self.quorum_reached():
+                    self.cond_var.notify_all()
+                self.cond_var.wait_for(self.quorum_reached)
+            
+            winners = get_winner(self, agency_id)
             send_messages(client_socket, winners)
         except Exception as e:
             logger.error(
                 action, logger.LogResult.fail,
             )
             raise e
+        finally:
+            client_socket.close()
 
     def run(self):
         action = "accept-connection"
@@ -54,6 +71,7 @@ class Server:
             server_socket.bind((self.server_host, self.server_port))
             server_socket.listen()
             while True:
+                self.threads = [t for t in self.threads if t.is_alive()]    
                 try:
                     logger.info(action, logger.LogResult.in_progress)
                     client_socket, _ = server_socket.accept()
@@ -62,5 +80,8 @@ class Server:
                     raise e
                 logger.info(action, logger.LogResult.success)
 
-                with client_socket:
-                    self._handle_client(client_socket)
+                client_thread = threading.Thread(target=self._handle_client, args=(client_socket,))
+                client_thread.start()
+                self.threads.append(client_thread)
+    def quorum_reached(self):
+        return self.agency_quorum_min <= self.agencies_finished
