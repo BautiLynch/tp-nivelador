@@ -18,7 +18,7 @@ const NACK_MESSAGE = "NACK"
 const END_MESSAGE = "END"
 
 func SendMessage(socket io.Writer, payload string) error {
-	message := SerializeMessage(payload)
+	message := serializeMessage(payload)
 	if err := safe_socket.SendAll(socket, message); err != nil {
 		return err
 	}
@@ -44,22 +44,22 @@ func RecvMessage(socket io.Reader) (string, bool, error) {
 	return string(winner), false, nil
 }
 
-func CreateHeader(payloadBytes []byte) []byte {
+func createHeader(payloadBytes []byte) []byte {
 	header := make([]byte, HEADER_SIZE)
 	binary.BigEndian.PutUint32(header, uint32(len(payloadBytes)))
 	return header
 }
 
-func SerializeMessage(payload string) []byte {
+func serializeMessage(payload string) []byte {
 	payloadBytes := []byte(payload)
-	header := CreateHeader(payloadBytes)
+	header := createHeader(payloadBytes)
 
 	return append(header, payloadBytes...)
 }
 
 func SendBatchBetMessage(socket net.Conn, batch []string) (bool, error) {
 	payload := strings.Join(batch, BATCH_SEPARATOR)
-	message := SerializeMessage(payload)
+	message := serializeMessage(payload)
 
 	if err := safe_socket.SendAll(socket, message); err != nil {
 		return false, err
