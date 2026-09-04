@@ -2,8 +2,8 @@ package client
 
 import (
 	"bufio"
+	"io"
 	"os"
-	"strings"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/communication"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
@@ -19,44 +19,45 @@ func SendBets(client *Client) error {
 	defer inputFile.Close()
 
 	scanner := bufio.NewScanner(inputFile)
-	bets := make([]string, 0, client.config.BatchSize)
+	batch := communication.NewMessage()
+	betsNumber := 0
 	batchNumber := 1
 	for scanner.Scan() {
-		line := scanner.Text()
-		bet := CreateBetMessage(line, client.config.AgencyId)
-		bets = append(bets, bet)
+		if betsNumber > 0 {
+			batch = append(batch, communication.BATCH_SEPARATOR...)
+		}
+		batch = append(batch, client.config.AgencyId...)
+		batch = append(batch, ',')
+		batch = append(batch, scanner.Bytes()...)
+		betsNumber += 1
 
-		if len(bets) < client.config.BatchSize {
+		if betsNumber < client.config.BatchSize {
 			continue
 		}
 
-		messageArgs := []any{"agency-id", client.config.AgencyId, "message", batchNumber}
-
-		accepted, err := communication.SendBatchBetMessage(client.conn, bets)
+		accepted, err := communication.SendBatchBetMessage(client.conn, batch)
 		if err != nil {
-			logger.Error("send-batch", logger.Fail, messageArgs...)
+			logger.Error("send-batch", logger.Fail, "agency-id", client.config.AgencyId, "message", batchNumber)
 			return err
 		}
 
 		if !accepted {
-			logger.Warn("send-batch", logger.Fail, messageArgs...)
+			logger.Warn("send-batch", logger.Fail, "agency-id", client.config.AgencyId, "message", batchNumber)
 		}
 
-		bets = bets[:0]
+		batch = communication.ReuseMessage(batch)
+		betsNumber = 0
 		batchNumber += 1
 	}
 
-	if len(bets) != 0 {
-		messageArgs := []any{"agency-id", client.config.AgencyId, "message", batchNumber}
-		logger.Info("send-batch", logger.InProgress, messageArgs...)
-
-		accepted, err := communication.SendBatchBetMessage(client.conn, bets)
+	if betsNumber != 0 {
+		accepted, err := communication.SendBatchBetMessage(client.conn, batch)
 		if err != nil {
-			logger.Error("send-batch", logger.Fail, messageArgs...)
+			logger.Error("send-batch", logger.Fail, "agency-id", client.config.AgencyId, "message", batchNumber)
 			return err
 		}
 		if !accepted {
-			logger.Warn("send-batch", logger.Fail, messageArgs...)
+			logger.Warn("send-batch", logger.Fail, "agency-id", client.config.AgencyId, "message", batchNumber)
 		}
 
 	}
@@ -83,8 +84,8 @@ func GetWinners(client *Client) error {
 
 	defer outputFile.Close()
 
+	messageArgs := []any{"agency-id", client.config.AgencyId}
 	for {
-		messageArgs := []any{"agency-id", client.config.AgencyId}
 		logger.Info("recv-winner", logger.InProgress, messageArgs...)
 
 		responseWinner, finished, err := communication.RecvMessage(client.conn)
@@ -97,18 +98,21 @@ func GetWinners(client *Client) error {
 			break
 		}
 
-		if _, err := outputFile.WriteString(responseWinner + "\n"); err != nil {
+		line := responseWinner + "\n"
+		n, err := outputFile.WriteString(line)
+
+		if err != nil {
 			logger.Error("write-output-file", logger.Fail, messageArgs...)
 			return err
+		}
+
+		if n != len(line) {
+			logger.Error("write-output-file", logger.Fail, messageArgs...)
+			return io.ErrShortWrite
 		}
 
 		logger.Info("recv-winner", logger.Success, messageArgs...)
 	}
 
 	return nil
-}
-
-func CreateBetMessage(line string, agencyId string) string {
-	bet := []string{agencyId, line}
-	return strings.Join(bet, ",")
 }

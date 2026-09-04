@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strings"
 
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/logger"
 	"github.com/7574-sistemas-distribuidos/tp-nivelador/src/safe_socket"
@@ -18,11 +17,11 @@ const NACK_MESSAGE = "NACK"
 const END_MESSAGE = "END"
 
 func SendMessage(socket io.Writer, payload string) error {
-	message := serializeMessage(payload)
-	if err := safe_socket.SendAll(socket, message); err != nil {
-		return err
-	}
-	return nil
+	message := NewMessage()
+	message = append(message, payload...)
+	serializeMessage(message)
+
+	return safe_socket.SendAll(socket, message)
 }
 
 func RecvMessage(socket io.Reader) (string, bool, error) {
@@ -44,24 +43,23 @@ func RecvMessage(socket io.Reader) (string, bool, error) {
 	return string(winner), false, nil
 }
 
-func createHeader(payloadBytes []byte) []byte {
-	header := make([]byte, HEADER_SIZE)
-	binary.BigEndian.PutUint32(header, uint32(len(payloadBytes)))
-	return header
+func NewMessage() []byte {
+	return make([]byte, HEADER_SIZE)
 }
 
-func serializeMessage(payload string) []byte {
-	payloadBytes := []byte(payload)
-	header := createHeader(payloadBytes)
-
-	return append(header, payloadBytes...)
+func ReuseMessage(message []byte) []byte {
+	return message[:HEADER_SIZE]
 }
 
-func SendBatchBetMessage(socket net.Conn, batch []string) (bool, error) {
-	payload := strings.Join(batch, BATCH_SEPARATOR)
-	message := serializeMessage(payload)
+func serializeMessage(message []byte) {
+	payloadSize := len(message) - HEADER_SIZE
+	binary.BigEndian.PutUint32(message[:HEADER_SIZE], uint32(payloadSize))
+}
 
-	if err := safe_socket.SendAll(socket, message); err != nil {
+func SendBatchBetMessage(socket net.Conn, batch []byte) (bool, error) {
+	serializeMessage(batch)
+
+	if err := safe_socket.SendAll(socket, batch); err != nil {
 		return false, err
 	}
 
