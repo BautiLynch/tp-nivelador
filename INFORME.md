@@ -63,6 +63,14 @@ Ademas se utiliza una condvar para la espera del quorum. Cuando una agencia envi
 
 ### Graceful shutdown
 
-El cliente espera la señal de terminacion de forma concurrente a la comunicacion con el servidor. Al recibirla, registra que se encuentra terminando y cierra la conexion activa. Esto permite desbloquear cualquier operacion de lectura o escritura que estaba esperando sobre el socket y continuar con la finalizacion del programa. El estado de terminacion se comparte de manera segura mediante un booleano atomico.
+El cliente espera la señal de terminacion de forma concurrente a la comunicacion con el servidor. Para coordinar la goroutine con el thread principal, se utilizan thres channels:
+
+`signalChannel`: recibe la señal de `SIGTERM` enviada por el sistema operativo.
+
+`terminated`: informa al handler que el Run principal termino.
+
+`handlerEnded`: permite que el thread principal espere la finalizacion del handler.
+
+Al recibirla, registra que se encuentra terminando y cierra la conexion activa. Esto permite desbloquear cualquier operacion de lectura o escritura que estaba esperando sobre el socket y continuar con la finalizacion del programa. El estado de terminacion se comparte de manera segura mediante un booleano atomico.
 
 El servidor utiliza un evento compartido para indicar que recibio el `SIGTERM`. El socket de escucha tiene un timeout que permite al thread principal comprobar si este evento paso aun si no llegan nuevas conexiones. Cuando empieza la terminacion, despierta a los threads que se encuentran esperando el quorum para que se desbloqueen y cierra los sockets de los clientes. Termina por esperar la finalizacion de todos los thread mediante un `join` y cierra el socket principal.

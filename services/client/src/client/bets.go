@@ -23,6 +23,9 @@ func SendBets(client *Client) error {
 	betsNumber := 0
 	batchNumber := 1
 	for scanner.Scan() {
+		if client.terminating.Load() {
+			return nil
+		}
 		if betsNumber > 0 {
 			batch = append(batch, communication.BATCH_SEPARATOR...)
 		}
